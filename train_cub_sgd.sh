@@ -1,1 +1,1 @@
-python train.py --data-path cub_pytorch --workers 2 --classes 98 --save-prefix 'cub_sgd' --batch-size 32 --gpus 0 --model resnet50 --embed-dim 64 --lr 0.01 --factor 0.3 --use-pretrained --optimizer sgd 
+python train.py --data-path cub_pytorch --workers 2 --classes 100 --save-prefix 'cub_sgd' --batch-size 32 --gpus 0 --model resnet50 --embed-dim 64 --lr 0.01 --factor 0.1 --use-pretrained --optimizer sgd 

@@ -144,7 +144,7 @@ elif args.optimizer == 'sgd':
                  'lr:': args.lr*2
               }
             ], lr=args.lr, weight_decay=0.0004,momentum=0.9)
-    scheduler = MultiStepLR(optimizer,[50,100,150,200],args.factor)
+    scheduler = MultiStepLR(optimizer,[40,70,150,200],args.factor)
 
 
 if args.resume:
