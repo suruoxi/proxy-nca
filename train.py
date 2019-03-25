@@ -19,6 +19,7 @@ from torch import nn
 from torch.autograd import Variable
 from torch.nn import Parameter
 from torch.optim.lr_scheduler import ExponentialLR
+from torch.optim.lr_scheduler import MultiStepLR
 
 from proxynca import ProxyNCAUnstable, ProxyNCA
 
@@ -62,6 +63,8 @@ parser.add_argument('--model', type=str, default='resnet50',choices=model_names,
                     help='type of model to use. see vision_model for options.')
 parser.add_argument('--save-prefix', type=str,required=True,
                     help='prefix of saved checkpoint.')
+parser.add_argument('--optimizer', type=str,default='adam',
+                    help='which optimizer to use. default is adam.')
 parser.add_argument('--use-pretrained', action='store_true',
                     help='enable using pretrained model.')
 parser.add_argument('--exclude-positive', action='store_true',
@@ -109,22 +112,40 @@ else:
 
 #optimizer = torch.optim.SGD(model.parameters(), args.lr, momentum=args.momentum, 
 #
-optimizer = torch.optim.Adam(
-        [ { # basenet 
-            'params': list(set(model.parameters()).difference(set(model.fc.parameters()))),
-            'eps': args.base_eps,
-            'lr': args.lr
-          },
-          {# embedding layer
-            'params': model.fc.parameters(),
-            'lr': args.lr
-          },
-          {# proxies
-             'params': criterion.parameters(),
-             'lr:': args.lr
-          }
-        ], lr=args.lr)
-scheduler = ExponentialLR(optimizer=optimizer,gamma = args.factor)
+if args.optimizer == 'adam':
+    optimizer = torch.optim.Adam(
+            [ { # basenet 
+                'params': list(set(model.parameters()).difference(set(model.fc.parameters()))),
+                'eps': args.base_eps,
+                'lr': args.lr
+              },
+              {# embedding layer
+                'params': model.fc.parameters(),
+                'lr': args.lr
+              },
+              {# proxies
+                 'params': criterion.parameters(),
+                 'lr:': args.lr
+              }
+            ], lr=args.lr, weight_decay=0.0)
+    scheduler = ExponentialLR(optimizer=optimizer,gamma = args.factor)
+elif args.optimizer == 'sgd':
+    optimizer = torch.optim.SGD(
+            [ { # basenet 
+                'params': list(set(model.parameters()).difference(set(model.fc.parameters()))),
+                'lr': args.lr
+              },
+              {# embedding layer
+                'params': model.fc.parameters(),
+                'lr': args.lr*2
+              },
+              {# proxies
+                 'params': criterion.parameters(),
+                 'lr:': args.lr*2
+              }
+            ], lr=args.lr, weight_decay=0.0004,momentum=0.9)
+    scheduler = MultiStepLR(optimizer,[50,100,150,200],args.factor)
+
 
 if args.resume:
     if os.path.isfile(args.resume):
@@ -137,7 +158,10 @@ if args.resume:
                 k = k[7:]
             state_dict[k] = v
         model.load_state_dict(state_dict)
-        optimizer.load_state_dict(checkpoint['optimizer'])
+        if args.optimizer == 'adam':
+            print(">>>>> currently has bug to load Adam state dict <<<<")
+        else:
+            optimizer.load_state_dict(checkpoint['optimizer'])
         criterion.proxies = checkpoint['proxies']
         print("=> loaded checkpoint '{}' (epoch {})"
               .format(args.resume, checkpoint['epoch']))
