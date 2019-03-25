@@ -21,8 +21,8 @@ model.fc = nn.Linear(model.fc.in_features, 64)
 
 model.cuda()
 
-#_state_dict = torch.load('checkpoints/cub_default_checkpoint_120.pth.tar')['state_dict']
-_state_dict = torch.load('checkpoints/cub_default_sgd_checkpoint_68.pth.tar')['state_dict']
+#_state_dict = torch.load('checkpoints/best_cub_default_checkpoint.pth.tar')['state_dict']
+_state_dict = torch.load('checkpoints/cub_sgd_checkpoint_54.pth.tar')['state_dict']
 
 state_dict = {}
 
@@ -37,13 +37,14 @@ model.eval()
 
 tfm = transforms.Compose([
         #transforms.RandomResizedCrop(224),
-        transforms.Resize((224,224)),
+        transforms.Resize((256,256)),
+        transforms.CenterCrop((224,224)),
         #transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         normalize])
 
 val_dataset = datasets.ImageFolder(
-    '/home/futian.zp/data/CUB_200_2011/pytorch/val',
+    'cub_pytorch/val',
     tfm)
 
 val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=100,shuffle=False,pin_memory=True)
@@ -68,7 +69,7 @@ def evaluate(emb, labels):
     emb = emb.cuda()
     emb = F.normalize(emb, p=2, dim=-1)
     mm = torch.matmul(emb, emb.t())
-    dist = 2 - 2*mm
+    dist = emb.pow(2).sum(dim=1, keepdim=True) + emb.t().pow(2).sum(dim=0, keepdim=True)  - 2*mm
     dist = dist.sqrt()
 
     dist = dist.cpu()
