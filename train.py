@@ -44,7 +44,7 @@ parser.add_argument('--batch-size', type=int, default=128,
                     help='total batch_size on all gpus.')
 parser.add_argument('--gpus', type=str, default='0',
                     help='list of gpus to use, e.g. 0 or 0,2,5.')
-parser.add_argument('--epochs', type=int, default=80,
+parser.add_argument('--epochs', type=int, default=200,
                     help='number of training epochs. default is 20.')
 parser.add_argument('--lr', type=float, default=0.04,
                     help='learning rate. default is 0.0001.')
@@ -52,6 +52,8 @@ parser.add_argument('--smoothing-const', type=float, default=0.1,
                     help='default is 0.1.')
 parser.add_argument('--factor', type=float, default=0.94,
                     help='learning rate schedule factor. default is 0.94.')
+parser.add_argument('--base-eps', type=float, default=1.0,
+                    help='eps for base net in Adam')
 parser.add_argument('--resume', type=str, default=None,
                     help='path to checkpoint')
 parser.add_argument('--seed', type=int, default=None,
@@ -70,7 +72,8 @@ args = parser.parse_args()
 
 logging.info(args)
 
-assert(os.path.exists('checkpoints/'))
+if not os.path.exists('checkpoints/'):
+    os.mkdir('checkpoints')
 
 # seed
 if args.seed is not None:
@@ -105,7 +108,22 @@ else:
     criterion = ProxyNCA(args.classes, args.embed_dim, args.smoothing_const)
 
 #optimizer = torch.optim.SGD(model.parameters(), args.lr, momentum=args.momentum, 
-optimizer = torch.optim.Adam(model.parameters(), args.lr)
+#
+optimizer = torch.optim.Adam(
+        [ { # basenet 
+            'params': list(set(model.parameters()).difference(set(model.fc.parameters()))),
+            'eps': args.base_eps,
+            'lr': args.lr
+          },
+          {# embedding layer
+            'params': model.fc.parameters(),
+            'lr': args.lr
+          },
+          {# proxies
+             'params': criterion.parameters(),
+             'lr:': args.lr
+          }
+        ], lr=args.lr)
 scheduler = ExponentialLR(optimizer=optimizer,gamma = args.factor)
 
 if args.resume:
@@ -141,8 +159,8 @@ normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
 train_dataset = datasets.ImageFolder(
     traindir,
     transforms.Compose([
-        #transforms.RandomResizedCrop(224),
-        transforms.Resize((224,224)),
+        transforms.RandomResizedCrop(224),
+        #transforms.Resize((224,224)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         normalize])
@@ -183,6 +201,7 @@ def train(train_loader, model, criterion, optimizer,  epoch, args):
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_value_(model.parameters(), 10)
         optimizer.step()
 
         # measure elapsed time
@@ -236,12 +255,3 @@ if __name__ == "__main__":
             'proxies': criterion.proxies
             }
         torch.save(state, 'checkpoints/%s_checkpoint_%d.pth.tar'%(args.save_prefix,epoch+1))
-
-
-
-
-
-
-
-
-
